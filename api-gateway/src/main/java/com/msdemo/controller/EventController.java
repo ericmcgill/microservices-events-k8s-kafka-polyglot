@@ -1,17 +1,18 @@
 package com.msdemo.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.msdemo.model.Metadata;
+import com.msdemo.model.PancakesResponseModel;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.CreateTopicsResult;
 import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
-import org.springframework.kafka.core.DefaultKafkaProducerFactory;
-import org.springframework.kafka.core.KafkaAdmin;
-import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.core.*;
 import org.springframework.kafka.listener.ConcurrentMessageListenerContainer;
 import org.springframework.kafka.listener.MessageListener;
 import org.springframework.kafka.listener.config.ContainerProperties;
@@ -28,7 +29,7 @@ import static org.apache.kafka.clients.consumer.ConsumerConfig.GROUP_ID_CONFIG;
 @RequestMapping("api/v1/")
 public class EventController {
 
-    Logger logger = LoggerFactory.getLogger(HomeController.class);
+    private Logger logger = LoggerFactory.getLogger(HomeController.class);
 
     @Autowired
     private KafkaTemplate<String, String> template;
@@ -36,15 +37,21 @@ public class EventController {
     @Autowired
     private KafkaAdmin admin;
 
-    @RequestMapping("dynamic-pancakes")
-    public String dynamicPancakes() {
+    @RequestMapping("pancakes")
+    public PancakesResponseModel pancakes() {
         try {
             Future<String> f = sendForWaiting();
-            return f.get();
-        } catch (Exception e) {
-            return "Nope";
-        }
+            ObjectMapper mapper = new ObjectMapper();
+            try {
+                PancakesResponseModel model = mapper.readValue(f.get(), PancakesResponseModel.class);
+                return model;
+            } catch (Exception e) {
+                return new PancakesResponseModel();
+            }
 
+        } catch (Exception e) {
+            return new PancakesResponseModel();
+        }
 
     }
 
@@ -67,7 +74,7 @@ public class EventController {
         AdminClient ac = AdminClient.create(admin.getConfig());
         ArrayList<NewTopic> newTopicsList = new ArrayList<>();
         NewTopic newTopic = new NewTopic(topic, 1, (short) 1);
-        NewTopic newTopic2 = new NewTopic("incoming", 1, (short) 1);
+        NewTopic newTopic2 = new NewTopic("order-in", 1, (short) 1);
         newTopicsList.add(newTopic);
         newTopicsList.add(newTopic2);
         final CreateTopicsResult topics = ac.createTopics(newTopicsList);
@@ -126,21 +133,11 @@ public class EventController {
         container.start();
         setTimeout(() -> container.stop(), 1000);
 
-        // again, this is minimum required config, you should check
-        // https://kafka.apache.org/documentation/#producerconfigs
-        Map<String, Object> producerConfig = new HashMap<String, Object>(){
-            {
-                put(org.apache.kafka.clients.producer.ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, brokerAddress);
-            }
-        };
 
         // create KafkaTemplate from KafkaProducerFactory
         // which specifies serializers
-        KafkaTemplate<String, String> kafkaTemplate = new KafkaTemplate<>(
-                new DefaultKafkaProducerFactory<>(
-                        producerConfig,
-                        new StringSerializer(),
-                        new StringSerializer()));
+        KafkaTemplate<String, String> kafkaTemplate = kafkaTemplate();
+
         logger.info(String.format("Sending to topic: %s", topic));
         try
         {
@@ -149,18 +146,37 @@ public class EventController {
 
         }
 
+        Metadata m = new Metadata();
+        m.setId(uuid);
+        m.setCmd("order-in");
+        List<String> contibutors = new ArrayList<>();
+        contibutors.add("waiter (api-gateway)");
+        m.setContributors(contibutors);
+        m.setRole("waiter");
+        m.setTimestamp((int)(System.currentTimeMillis()/1000));
+        List<String> data = new ArrayList<>();
+        data.add(uuid);
 
+        PancakesResponseModel order = new PancakesResponseModel();
+        order.setData(data);
+        order.setMetadata(m);
 
         //kafkaTemplate.send(topic, String.format("Some random shit: %s", uuid));
-        kafkaTemplate.send("incoming", String.format(uuid));
-        kafkaTemplate.flush();
 
+        ObjectMapper mapper = new ObjectMapper();
+        try{
+            String orderJson = mapper.writeValueAsString(order);
+            kafkaTemplate.send("order-in", orderJson);
+            kafkaTemplate.flush();
+        } catch (Exception e) {
+            logger.error("Oops couldn't convert to JSON>>>>>");
+        }
 
         return completableFuture;
 
     }
 
-    public static void setTimeout(Runnable runnable, int delay){
+    private static void setTimeout(Runnable runnable, int delay){
         new Thread(() -> {
             try {
                 Thread.sleep(delay);
@@ -170,6 +186,22 @@ public class EventController {
                 System.err.println(e);
             }
         }).start();
+    }
+
+
+    private Map<String, Object> producerConfigs() {
+        Map<String, Object> props = new HashMap<>();
+        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+        props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+
+        return props;
+    }
+    private ProducerFactory<String, String> producerFactory() {
+        return new DefaultKafkaProducerFactory<>(producerConfigs());
+    }
+    private KafkaTemplate<String, String> kafkaTemplate() {
+        return new KafkaTemplate<>(producerFactory());
     }
 
 }
