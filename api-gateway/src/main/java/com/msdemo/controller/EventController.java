@@ -40,10 +40,12 @@ public class EventController {
     @RequestMapping("pancakes")
     public PancakesResponseModel pancakes() {
         try {
+            logger.info(">>>>>>>>>> Received request.");
             Future<String> f = sendForWaiting();
             ObjectMapper mapper = new ObjectMapper();
             try {
                 PancakesResponseModel model = mapper.readValue(f.get(), PancakesResponseModel.class);
+                logger.info("<<<<<<<<<< Sending response.");
                 return model;
             } catch (Exception e) {
                 return new PancakesResponseModel();
@@ -60,11 +62,11 @@ public class EventController {
         CompletableFuture<String> completableFuture
                 = new CompletableFuture<>();
 
-        Executors.newCachedThreadPool().submit(() -> {
-            Thread.sleep(500);
-
-            return null;
-        });
+//        Executors.newCachedThreadPool().submit(() -> {
+//            Thread.sleep(500);
+//
+//            return null;
+//        });
 
         String uuid = UUID.randomUUID().toString();
         String topic = "api-"+ uuid;
@@ -74,7 +76,7 @@ public class EventController {
         AdminClient ac = AdminClient.create(admin.getConfig());
         ArrayList<NewTopic> newTopicsList = new ArrayList<>();
         NewTopic newTopic = new NewTopic(topic, 1, (short) 1);
-        NewTopic newTopic2 = new NewTopic("order-in", 1, (short) 1);
+        NewTopic newTopic2 = new NewTopic("orders-from-customers", 1, (short) 1);
         newTopicsList.add(newTopic);
         newTopicsList.add(newTopic2);
         final CreateTopicsResult topics = ac.createTopics(newTopicsList);
@@ -141,21 +143,22 @@ public class EventController {
         logger.info(String.format("Sending to topic: %s", topic));
         try
         {
-            Thread.sleep(500L);
+            Thread.sleep(300L);
         } catch (Exception e) {
 
         }
 
         Metadata m = new Metadata();
         m.setId(uuid);
-        m.setCmd("order-in");
+        m.setCmd("orders-from-customers");
         List<String> contibutors = new ArrayList<>();
-        contibutors.add("waiter (api-gateway)");
+        contibutors.add("maitre'd (api-gateway)");
         m.setContributors(contibutors);
         m.setRole("waiter");
         m.setTimestamp((int)(System.currentTimeMillis()/1000));
         List<String> data = new ArrayList<>();
-        data.add(uuid);
+        data.add("pancakes");
+        data.add("coffee");
 
         PancakesResponseModel order = new PancakesResponseModel();
         order.setData(data);
@@ -166,7 +169,7 @@ public class EventController {
         ObjectMapper mapper = new ObjectMapper();
         try{
             String orderJson = mapper.writeValueAsString(order);
-            kafkaTemplate.send("order-in", orderJson);
+            kafkaTemplate.send("orders-from-customers", orderJson);
             kafkaTemplate.flush();
         } catch (Exception e) {
             logger.error("Oops couldn't convert to JSON>>>>>");

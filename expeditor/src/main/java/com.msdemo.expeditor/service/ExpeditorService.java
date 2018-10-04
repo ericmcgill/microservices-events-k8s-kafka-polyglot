@@ -42,7 +42,7 @@ public class ExpeditorService {
             List<String> contributors = metadata.getContributors();
             metadata.setCmd("serve pancakes");
 
-            String topic = String.format("api-%s", metadata.getId());
+            String topic = String.format("order-ready");
             contributors.add("expeditor");
             metadata.setContributors(contributors);
             List<String> data = responseModel.getData();

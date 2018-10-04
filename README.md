@@ -35,11 +35,7 @@ The system is designed to mimic a children's book (https://www.amazon.com/Pancak
 From RESTful API, a message will be published.
 ```
 OUT:
-{
-    role: 'kid',
-    cmd: 'order',
-    data: {order: ['pancackes']}
-}
+        
 ```
 
 #### When a 'kid' has published a request, a waiter will be subscribed to these events. The waiter will take the order and pass it off to the team responsible for making it. (Waiter will have no awareness of what is requeired to make the order. Waiter _only_ knows how to take the order and serve it.)
@@ -49,12 +45,13 @@ From the waiter, a message will be published.
 # IN:
 {
     role: 'kid',
-    cmd: 'i-want-pancakes'
+    cmd: 'order',
+    data: {order: ['pancakes']}
 }
 
 {
-    role: 'cook',
-    cmd: 'order-up'
+    role: 'expediter',
+    cmd: 'order-ready'
     data: {order: ['pancakes', 'syrup', 'butter']}
 }
 
@@ -151,7 +148,7 @@ They each are listening for messages that will match this pattern (published by 
 
 {
     role: 'expediter',
-    cmd: 'order-up',
+    cmd: 'order-ready',
     data: {order: ['pancakes', 'syrup', 'butter']}
 }
 
