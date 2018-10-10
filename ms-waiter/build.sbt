@@ -13,6 +13,7 @@ libraryDependencies ++= Seq(
   "org.apache.kafka" % "kafka_2.12" % "2.0.0",
   "net.codingwell" %% "scala-guice" % "4.2.1"
 )
+
 // Adds additional packages into Twirl
 //TwirlKeys.templateImports += "com.msdemo.controllers._"
 
